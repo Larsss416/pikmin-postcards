@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pikmin 明信片地圖</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #c8e63c;
+    --green-dark: #9ab82a;
+    --green-light: #e8f7a0;
+    --brown: #5c3d1e;
+    --cream: #fef9ee;
+    --orange: #ff7b2e;
+    --shadow: 0 4px 20px rgba(92,61,30,0.12);
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Nunito','Zen Maru Gothic',sans-serif; background: var(--cream); color: var(--brown); min-height: 100vh; overflow-x: hidden; }
+
+  nav { background: var(--green); padding: 0 20px; display: flex; align-items: center; gap: 16px; height: 58px; box-shadow: 0 3px 12px rgba(0,0,0,.1); position: sticky; top:0; z-index:100; }
+  .nav-logo { font-size:22px; font-weight:900; color:var(--brown); display:flex; align-items:center; gap:8px; text-decoration:none; }
+  .nav-logo span { font-size:26px; }
+  .nav-links { display:flex; gap:4px; margin-left:auto; }
+  .nav-links a { padding:6px 14px; border-radius:20px; font-weight:700; font-size:14px; color:var(--brown); text-decoration:none; transition:background .2s; }
+  .nav-links a:hover,.nav-links a.active { background:rgba(255,255,255,.5); }
+
+  .toolbar { background:white; border-bottom:2px solid var(--green-light); padding:10px 20px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .view-toggle { display:flex; border:2px solid var(--green); border-radius:10px; overflow:hidden; }
+  .view-toggle button { padding:6px 14px; font-size:18px; background:none; border:none; cursor:pointer; transition:background .2s; font-family:inherit; }
+  .view-toggle button.active { background:var(--green); }
+  .filter-chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { padding:5px 14px; border-radius:20px; font-weight:700; font-size:13px; border:2px solid transparent; cursor:pointer; transition:all .2s; background:var(--green-light); color:var(--brown); }
+  .chip.active { background:var(--green); border-color:var(--green-dark); }
+  .chip:hover { transform:translateY(-1px); }
+  .toolbar-right { margin-left:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .search-box { display:flex; align-items:center; background:var(--cream); border:2px solid var(--green); border-radius:20px; padding:4px 14px; gap:6px; }
+  .search-box input { border:none; background:none; font-family:inherit; font-size:13px; color:var(--brown); outline:none; width:120px; }
+  .search-box input::placeholder { color:#aaa; }
+  .sort-select { border:2px solid var(--green); border-radius:20px; padding:5px 12px; font-family:inherit; font-size:13px; font-weight:700; background:white; color:var(--brown); cursor:pointer; outline:none; }
+  .add-btn { background:var(--green); border:none; border-radius:20px; padding:7px 16px; font-family:inherit; font-weight:800; font-size:13px; color:var(--brown); cursor:pointer; transition:all .2s; display:flex; align-items:center; gap:6px; }
+  .add-btn:hover { background:var(--green-dark); color:white; }
+
+  .main { display:flex; height:calc(100vh - 58px - 56px); }
+  .map-panel { flex:1; background:#d4e8c2; position:relative; overflow:hidden; min-width:0; }
+  .map-panel.hidden { display:none; }
+  .map-bg { width:100%; height:100%; background:
+    repeating-linear-gradient(0deg,rgba(255,255,255,.12) 0,rgba(255,255,255,.12) 1px,transparent 1px,transparent 40px),
+    repeating-linear-gradient(90deg,rgba(255,255,255,.12) 0,rgba(255,255,255,.12) 1px,transparent 1px,transparent 40px),
+    linear-gradient(135deg,#c8dfa8 0%,#b5d48e 40%,#a8cc7a 100%); position:relative; }
+  .map-road { position:absolute; background:rgba(255,255,255,.55); border-radius:4px; }
+  .map-pin { position:absolute; cursor:pointer; transform:translate(-50%,-100%); transition:transform .2s; z-index:10; }
+  .map-pin:hover { transform:translate(-50%,-110%) scale(1.15); }
+  .pin-bubble { width:44px; height:44px; border-radius:50% 50% 50% 4px; border:3px solid white; box-shadow:0 4px 12px rgba(0,0,0,.25); overflow:hidden; background:#eee; display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .pin-bubble img { width:100%; height:100%; object-fit:cover; }
+  .pin-badge { position:absolute; bottom:-6px; right:-6px; background:white; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:10px; box-shadow:0 2px 6px rgba(0,0,0,.2); }
+  .map-popup { position:absolute; background:white; border-radius:14px; padding:12px; box-shadow:var(--shadow); width:210px; z-index:20; display:none; animation:popIn .2s ease; }
+  .map-popup.visible { display:block; }
+  @keyframes popIn { from{opacity:0;transform:scale(.85) translateY(6px)} to{opacity:1;transform:scale(1) translateY(0)} }
+  .popup-img { width:100%; height:110px; border-radius:10px; margin-bottom:8px; background:var(--green-light); display:flex; align-items:center; justify-content:center; font-size:40px; overflow:hidden; }
+  .popup-img img { width:100%; height:100%; object-fit:cover; }
+  .popup-title { font-weight:800; font-size:14px; }
+  .popup-sub { font-size:11px; color:var(--orange); font-weight:700; margin-top:2px; }
+  .popup-loc { font-size:12px; color:#888; margin-top:3px; }
+  .popup-stars { font-size:13px; margin-top:4px; }
+  .popup-edit-btn { margin-top:8px; width:100%; padding:5px; background:var(--green-light); border:none; border-radius:8px; font-family:inherit; font-weight:700; font-size:12px; cursor:pointer; color:var(--brown); }
+  .popup-edit-btn:hover { background:var(--green); }
+
+  .cards-panel { width:360px; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px; background:var(--cream); border-left:2px solid var(--green-light); }
+  .cards-panel.full-width { width:100%; display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); align-content:start; }
+  .cards-panel::-webkit-scrollbar { width:6px; }
+  .cards-panel::-webkit-scrollbar-thumb { background:var(--green); border-radius:4px; }
+
+  .card { background:white; border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; cursor:pointer; transition:transform .2s,box-shadow .2s; animation:fadeUp .35s ease both; }
+  .card:hover { transform:translateY(-4px); box-shadow:0 10px 30px rgba(92,61,30,.18); }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+  .card-img { width:100%; height:260px; background:var(--green-light); display:flex; align-items:center; justify-content:center; font-size:56px; overflow:hidden; position:relative; }
+  .card-img img { width:100%; height:100%; object-fit:cover; }
+  .card-img .edit-overlay { display:none; }
+  .card-body { padding:12px 14px 14px; }
+  .card-type { display:inline-block; font-size:11px; font-weight:800; padding:2px 10px; border-radius:10px; margin-bottom:6px; }
+  .type-mushroom { background:#ffe0b2; color:#e65100; }
+  .type-flower   { background:#fce4ec; color:#c2185b; }
+  .type-detector { background:#e8eaf6; color:#3949ab; }
+  .card-title { font-size:15px; font-weight:800; line-height:1.3; }
+  .card-sub { font-size:12px; color:var(--orange); font-weight:700; margin-top:1px; }
+  .card-stars { font-size:13px; margin-top:4px; letter-spacing:1px; }
+  .card-loc { font-size:12px; color:#999; margin-top:4px; display:flex; align-items:center; gap:4px; }
+  .card-time { font-size:12px; margin-top:6px; padding:6px 10px; border-radius:10px; background:var(--green-light); display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .card-time .time-val { font-weight:800; font-size:13px; }
+  .card-time .time-warn { font-size:11px; font-weight:800; }
+  .card-time .time-warn.safe { color:#4caf50; }
+  .card-time .time-warn.danger { color:#e53935; }
+  .time-btn { background:var(--green-light); border:2px solid var(--green); border-radius:10px; padding:3px 10px; font-size:12px; font-family:inherit; font-weight:700; cursor:pointer; color:var(--brown); transition:all .15s; white-space:nowrap; }
+  .time-btn:hover { background:var(--green); }
+  .copy-coord-btn { background:none; border:none; cursor:pointer; font-size:12px; color:#aaa; padding:1px 5px; border-radius:6px; transition:all .15s; font-family:inherit; }
+  .copy-coord-btn:hover { background:var(--green-light); color:var(--brown); }
+  .copy-coord-btn:hover { background:var(--green-light); color:var(--brown); }
+  .card-footer { display:flex; align-items:center; justify-content:space-between; margin-top:10px; gap:6px; }
+  .card-date { font-size:11px; color:#bbb; }
+  .card-actions { display:flex; gap:4px; }
+  .like-btn { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:800; color:#ccc; background:none; border:none; cursor:pointer; padding:4px 8px; border-radius:12px; transition:all .15s; font-family:inherit; }
+  .like-btn:hover,.like-btn.liked { color:var(--orange); background:#fff3e0; }
+  .edit-btn-small { background:var(--green-light); border:none; border-radius:10px; padding:4px 10px; font-size:12px; font-family:inherit; font-weight:700; cursor:pointer; color:var(--brown); transition:all .15s; }
+  .edit-btn-small:hover { background:var(--green); }
+
+  .empty { text-align:center; padding:40px 20px; color:#bbb; font-size:14px; }
+  .empty .icon { font-size:48px; margin-bottom:10px; }
+
+  .loading { text-align:center; padding:40px 20px; color:#aaa; font-size:14px; }
+  .loading .spin { font-size:36px; display:block; animation:spin 1s linear infinite; margin-bottom:10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; animation:fadeIn .2s ease; }
+  .modal-backdrop.hidden { display:none; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  .modal { background:white; border-radius:24px; padding:28px; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.25); animation:slideUp .25s ease; }
+  @keyframes slideUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+  .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; }
+  .modal-title { font-size:20px; font-weight:900; }
+  .modal-close { background:var(--green-light); border:none; border-radius:50%; width:34px; height:34px; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .2s; }
+  .modal-close:hover { background:var(--green); }
+
+  .form-group { margin-bottom:18px; }
+  .form-label { display:block; font-weight:800; font-size:13px; margin-bottom:6px; color:var(--brown); }
+  .form-label span { font-weight:400; color:#aaa; font-size:12px; }
+  .form-input { width:100%; padding:10px 14px; border:2px solid var(--green-light); border-radius:12px; font-family:inherit; font-size:14px; color:var(--brown); outline:none; transition:border .2s; background:var(--cream); }
+  .form-input:focus { border-color:var(--green); background:white; }
+  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  .img-upload-area { border:2px dashed var(--green); border-radius:14px; height:160px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; transition:all .2s; background:var(--green-light); position:relative; overflow:hidden; }
+  .img-upload-area:hover { background:var(--green); }
+  .img-upload-area .upload-icon { font-size:36px; margin-bottom:6px; }
+  .img-upload-area .upload-text { font-size:13px; font-weight:700; color:var(--brown); }
+  .img-upload-area input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+  .img-preview { width:100%; height:100%; object-fit:cover; position:absolute; inset:0; border-radius:12px; }
+
+  .coord-row { display:flex; gap:8px; align-items:center; }
+  .coord-row .form-input { flex:1; }
+  .coord-copy-btn { background:var(--green); border:none; border-radius:10px; padding:10px 14px; font-size:13px; font-weight:800; cursor:pointer; white-space:nowrap; font-family:inherit; color:var(--brown); transition:all .2s; }
+  .coord-copy-btn:hover { background:var(--green-dark); color:white; }
+  .coord-copied { background:var(--green-dark) !important; color:white !important; }
+
+  .star-picker { display:flex; gap:4px; margin-top:4px; }
+  .star-half-wrap { position:relative; width:34px; height:34px; cursor:pointer; transition:transform .15s; }
+  .star-half-wrap:hover { transform:scale(1.15); }
+  .star-half-wrap .s-bg  { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:28px; filter:grayscale(1) opacity(.25); }
+  .star-half-wrap .s-left{ position:absolute; left:0; top:0; width:50%; height:100%; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:28px; filter:grayscale(1) opacity(.25); }
+  .star-half-wrap .s-full{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:28px; filter:grayscale(1) opacity(.25); }
+  .star-half-wrap.half .s-left { filter:none; }
+  .star-half-wrap.full .s-full, .star-half-wrap.full .s-left { filter:none; }
+
+  .type-picker { display:flex; gap:8px; }
+  .type-opt { flex:1; padding:8px; border:2px solid var(--green-light); border-radius:12px; text-align:center; cursor:pointer; font-weight:700; font-size:13px; transition:all .2s; }
+  .type-opt.selected { border-color:var(--green-dark); background:var(--green); }
+  .type-opt:hover { background:var(--green-light); }
+
+  .modal-actions { display:flex; gap:10px; margin-top:24px; }
+  .btn-primary { flex:1; padding:12px; background:var(--green); border:none; border-radius:14px; font-family:inherit; font-weight:800; font-size:15px; cursor:pointer; color:var(--brown); transition:all .2s; }
+  .btn-primary:hover { background:var(--green-dark); color:white; }
+  .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-danger { padding:12px 18px; background:#fff0f0; border:none; border-radius:14px; font-family:inherit; font-weight:800; font-size:15px; cursor:pointer; color:#e53935; transition:all .2s; }
+  .btn-danger:hover { background:#e53935; color:white; }
+  .btn-ghost { padding:12px 18px; background:var(--green-light); border:none; border-radius:14px; font-family:inherit; font-weight:800; font-size:15px; cursor:pointer; color:var(--brown); transition:all .2s; }
+  .btn-ghost:hover { background:#ddd; }
+
+  .toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--brown); color:white; padding:10px 22px; border-radius:20px; font-weight:700; font-size:14px; z-index:999; transition:transform .3s ease; pointer-events:none; }
+  .toast.show { transform:translateX(-50%) translateY(0); }
+
+  @media(max-width:680px) {
+    .cards-panel { width:100%; border-left:none; border-top:2px solid var(--green-light); }
+    .main { flex-direction:column; height:auto; }
+    .map-panel { height:280px; flex:none; }
+    .nav-links a { display:none; }
+    .form-row { grid-template-columns:1fr; }
+  }
+  .pw-screen { position:fixed; inset:0; background:var(--green); z-index:9999; display:flex; align-items:center; justify-content:center; }
+  .pw-screen.hidden { display:none; }
+  .pw-box { background:white; border-radius:28px; padding:36px 32px; width:90%; max-width:360px; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.15); }
+  .pw-logo { font-size:52px; margin-bottom:8px; }
+  .pw-title { font-size:22px; font-weight:900; color:var(--brown); margin-bottom:4px; }
+  .pw-sub { font-size:13px; color:#aaa; margin-bottom:24px; }
+  .pw-input { width:100%; padding:12px 16px; border:2px solid var(--green-light); border-radius:14px; font-family:inherit; font-size:16px; color:var(--brown); outline:none; text-align:center; letter-spacing:2px; transition:border .2s; background:var(--cream); }
+  .pw-input:focus { border-color:var(--green); background:white; }
+  .pw-btn { margin-top:14px; width:100%; padding:13px; background:var(--green); border:none; border-radius:14px; font-family:inherit; font-weight:800; font-size:16px; color:var(--brown); cursor:pointer; transition:all .2s; }
+  .pw-btn:hover { background:var(--green-dark); color:white; }
+  .pw-error { color:#e53935; font-size:13px; font-weight:700; margin-top:10px; min-height:20px; }
+</style>
+</head>
+<body>
+
+<div class="pw-screen" id="pw-screen">
+  <div class="pw-box">
+    <div class="pw-logo">🌱</div>
+    <div class="pw-title">Pikmin 明信片</div>
+    <div class="pw-sub">請輸入密碼以繼續</div>
+    <input class="pw-input" id="pw-input" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkPw()">
+    <button class="pw-btn" onclick="checkPw()">進入</button>
+    <div class="pw-error" id="pw-error"></div>
+  </div>
+</div>
+
+<nav>
+  <a href="#" class="nav-logo"><span>🌱</span> Pikmin 明信片</a>
+  <div class="nav-links">
+    <a href="#" class="active">探索</a>
+  </div>
+</nav>
+
+<div class="toolbar">
+  <div class="view-toggle">
+    <button class="active" id="btn-map" onclick="setView('map')" title="地圖模式">🗺️</button>
+    <button id="btn-card" onclick="setView('card')" title="卡片模式">🃏</button>
+  </div>
+  <div class="filter-chips">
+    <div class="chip active" onclick="filterType('all',this)">全部</div>
+    <div class="chip" onclick="filterType('mushroom',this)">🍄 菇點</div>
+    <div class="chip" onclick="filterType('flower',this)">🌸 花點</div>
+    <div class="chip" onclick="filterType('detector',this)">✦ 探測器</div>
+  </div>
+  <div class="toolbar-right">
+    <div class="search-box">🔍 <input type="text" id="search-title" placeholder="搜尋名稱…" oninput="doFilter()"></div>
+    <div class="search-box">🏷️ <input type="text" id="search-sub" placeholder="搜尋副稱…" oninput="doFilter()"></div>
+    <div class="search-box">📍 <input type="text" id="search-coord" placeholder="搜尋座標…" oninput="doFilter()"></div>
+    <select class="sort-select" id="sort-select" onchange="doFilter()">
+      <option value="default">預設排序</option>
+      <option value="rating-desc">評分高→低</option>
+      <option value="rating-asc">評分低→高</option>
+      <option value="likes-desc">喜歡最多</option>
+      <option value="date-desc">最新上傳</option>
+    </select>
+    <button class="add-btn" onclick="openModal()">＋ 新增明信片</button>
+  </div>
+</div>
+
+<div class="main" id="main-area">
+  <div class="map-panel" id="map-panel">
+    <div class="map-bg" id="map-bg">
+      <div class="map-road" style="width:3px;height:100%;left:30%;top:0"></div>
+      <div class="map-road" style="width:3px;height:100%;left:65%;top:0"></div>
+      <div class="map-road" style="width:100%;height:3px;left:0;top:35%"></div>
+      <div class="map-road" style="width:100%;height:3px;left:0;top:70%"></div>
+    </div>
+    <div class="map-popup" id="map-popup">
+      <div class="popup-img" id="popup-img"></div>
+      <div class="popup-title" id="popup-title"></div>
+      <div class="popup-sub" id="popup-sub"></div>
+      <div class="popup-stars" id="popup-stars"></div>
+      <div class="popup-loc" id="popup-loc"></div>
+      <button class="popup-edit-btn" id="popup-edit-btn">✏️ 編輯</button>
+    </div>
+  </div>
+  <div class="cards-panel" id="cards-panel">
+    <div class="loading"><span class="spin">🌱</span>載入中…</div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-backdrop hidden" id="modal-backdrop" onclick="backdropClose(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title-text">新增明信片</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">明信片圖片</label>
+      <div class="img-upload-area" id="img-upload-area" onclick="document.getElementById('img-file-input').click()">
+        <input type="file" accept="image/*" id="img-file-input" onchange="handleImgUpload(event)" style="display:none">
+        <img id="img-preview" class="img-preview" style="display:none">
+        <div id="upload-overlay" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;pointer-events:none;">
+          <div class="upload-icon" id="upload-icon">📷</div>
+          <div class="upload-text" id="upload-text">點擊上傳圖片</div>
+        </div>
+        <div id="change-overlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.4);align-items:center;justify-content:center;border-radius:12px;pointer-events:none;">
+          <span style="color:white;font-weight:800;font-size:14px;">🔄 更換圖片</span>
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">名稱 <span>*必填</span></label>
+        <input class="form-input" id="f-title" placeholder="例：河濱公園花海" maxlength="30">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">副稱 <span>選填</span></label>
+        <input class="form-input" id="f-sub" placeholder="例：週末限定" maxlength="30">
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:18px">
+      <label class="form-label">類型</label>
+      <div class="type-picker" id="type-picker">
+        <div class="type-opt selected" data-type="mushroom" onclick="pickType(this)">🍄 菇點</div>
+        <div class="type-opt" data-type="flower" onclick="pickType(this)">🌸 花點</div>
+        <div class="type-opt" data-type="detector" onclick="pickType(this)">✦ 探測器</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">評分 <span id="rating-label">（尚未評分）</span></label>
+      <div class="star-picker" id="star-picker">
+        <div class="star-half-wrap" id="sw1"><div class="s-bg">⭐</div><div class="s-left">⭐</div><div class="s-full">⭐</div></div>
+        <div class="star-half-wrap" id="sw2"><div class="s-bg">⭐</div><div class="s-left">⭐</div><div class="s-full">⭐</div></div>
+        <div class="star-half-wrap" id="sw3"><div class="s-bg">⭐</div><div class="s-left">⭐</div><div class="s-full">⭐</div></div>
+        <div class="star-half-wrap" id="sw4"><div class="s-bg">⭐</div><div class="s-left">⭐</div><div class="s-full">⭐</div></div>
+        <div class="star-half-wrap" id="sw5"><div class="s-bg">⭐</div><div class="s-left">⭐</div><div class="s-full">⭐</div></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">座標 <span>直接貼上，例：25.0330, 121.5654</span></label>
+      <div class="coord-row">
+        <input class="form-input" id="f-coord" placeholder="例：25.0330, 121.5654" type="text">
+        <button class="coord-copy-btn" id="copy-coord-btn" onclick="copyCoord()">📋 複製</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">地點名稱</label>
+      <input class="form-input" id="f-loc" placeholder="例：台北市大安區" maxlength="40">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn-danger" id="delete-btn" onclick="deleteCard()" style="display:none">刪除</button>
+      <button class="btn-primary" id="save-btn" onclick="saveCard()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Supabase 設定 ──
+const SUPABASE_URL = 'https://bwcsqgfgccgrnemuekqg.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3Y3NxZ2ZnY2Nncm5lbXVla3FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MDg1ODIsImV4cCI6MjA5NTk4NDU4Mn0.A4PQU24957NTgd8GUdZfI5QOCtnuVAQviC3xqeb6pOs';
+const SUPABASE_PUBLISHABLE = 'sb_publishable_qbWdnrj_g6eJRlwKI9cF1w_8gau6l5q';
+
+async function sbFetch(path, options = {}) {
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': options.prefer || '',
+      ...options.headers
+    }
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// ── state ──
+let CARDS = [];
+let currentType = 'all';
+let currentView = 'map';
+let likedSet = new Set();
+let editingId = null;
+let modalRating = 0;
+let modalImg = null;
+
+const typeEmoji = { mushroom:'🍄', flower:'🌸', detector:'✦' };
+const typeCls   = { mushroom:'type-mushroom', flower:'type-flower', detector:'type-detector' };
+const typeLabel = { mushroom:'🍄 菇點', flower:'🌸 花點', detector:'✦ 探測器' };
+function starsPlain(n) { return n ? '⭐'.repeat(n) : ''; }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+// ── load from Supabase ──
+async function loadCards(retries = 3) {
+  document.getElementById('cards-panel').innerHTML = '<div class="loading"><span class="spin">🌱</span>載入中…</div>';
+  for (let i = 0; i < retries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch(SUPABASE_URL + '/rest/v1/postcards?select=id,title,sub,type,loc,lat,lng,rating,likes,created_at,pin_x,pin_y,img&order=created_at.desc&limit=200', {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY,
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      CARDS = data || [];
+      renderCards();
+      renderPins();
+      return;
+    } catch(e) {
+      if (i < retries - 1) {
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        document.getElementById('cards-panel').innerHTML = `
+          <div class="empty">
+            <div class="icon">⚠️</div>
+            載入失敗
+            <br><br>
+            <div style="font-size:11px;color:#aaa;word-break:break-all;margin-bottom:10px;">${e.message}</div>
+            <button onclick="loadCards()" style="padding:8px 20px;background:var(--green);border:none;border-radius:14px;font-family:inherit;font-weight:800;font-size:14px;cursor:pointer;">重新載入</button>
+          </div>`;
+      }
+    }
+  }
+}
+
+// ── filter / sort ──
+function getFiltered() {
+  const qt = document.getElementById('search-title').value.toLowerCase();
+  const qs = document.getElementById('search-sub').value.toLowerCase();
+  const qc = document.getElementById('search-coord').value.toLowerCase().replace(/\s/g,'');
+  const sort = document.getElementById('sort-select').value;
+  let list = CARDS.filter(c => {
+    const matchType = currentType === 'all' || c.type === currentType;
+    const matchT = !qt || (c.title||'').toLowerCase().includes(qt);
+    const matchS = !qs || (c.sub||'').toLowerCase().includes(qs);
+    const coordStr = (c.lat && c.lng) ? `${c.lat},${c.lng}` : '';
+    const matchC = !qc || coordStr.includes(qc);
+    return matchType && matchT && matchS && matchC;
+  });
+  if (sort === 'rating-desc') list.sort((a,b) => (b.rating||0) - (a.rating||0));
+  else if (sort === 'rating-asc') list.sort((a,b) => (a.rating||0) - (b.rating||0));
+  else if (sort === 'likes-desc') list.sort((a,b) => (b.likes||0) - (a.likes||0));
+  else if (sort === 'date-desc') list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  return list;
+}
+function doFilter() { renderCards(); renderPins(); }
+function filterType(type, el) {
+  currentType = type;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  doFilter();
+}
+
+// ── render cards ──
+function renderCards() {
+  const panel = document.getElementById('cards-panel');
+  const filtered = getFiltered();
+  if (!filtered.length) {
+    panel.innerHTML = '<div class="empty"><div class="icon">🌱</div>還沒有明信片，新增一張吧！</div>';
+    return;
+  }
+  panel.innerHTML = filtered.map((c, i) => {
+    const liked = likedSet.has(c.id);
+    const coordText = (c.lat && c.lng) ? `${c.lat}, ${c.lng}` : '';
+    return `
+    <div class="card" style="animation-delay:${i*0.04}s">
+      <div class="card-img" onclick="focusPin(${c.id})">
+        ${c.img ? `<img src="${c.img}" alt="${c.title}">` : (typeEmoji[c.type]||'🌱')}
+        <div class="edit-overlay" onclick="event.stopPropagation();openModal(${c.id})">✏️ 編輯</div>
+      </div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span class="card-type ${typeCls[c.type]||''}">${typeLabel[c.type]||c.type}</span>
+          ${(c.lat && c.lng) ? `<button class="copy-coord-btn" onclick="openBlueMap('${c.lat}','${c.lng}',event)" title="在 Blue Map 開啟" style="color:#4da8da;font-size:16px;padding:2px 6px;">🗺️</button>` : ''}
+        </div>
+        <div class="card-title">${c.title||''}</div>
+        ${c.sub ? `<div class="card-sub">${c.sub}</div>` : ''}
+        ${c.rating ? `<div class="card-stars">${starsDisplay(c.rating)} <span style="font-size:11px;color:#aaa">${c.rating}/5</span></div>` : ''}
+        <div class="card-loc">📍 ${c.loc||''}
+          ${coordText ? `<button class="copy-coord-btn" onclick="quickCopy('${coordText}',event)" title="複製座標">📋</button>` : ''}
+        </div>
+        ${coordText ? `<div id="time-${c.id}" class="card-time" style="display:none"></div>
+        <button class="time-btn" onclick="checkTime(event,${c.id},${c.lat},${c.lng})">🕐 查當地時間</button>` : ''}
+        <div class="card-footer">
+          <span class="card-date">${formatDate(c.created_at)}</span>
+          <div class="card-actions">
+            <button class="like-btn ${liked?'liked':''}" onclick="toggleLike(event,${c.id},${c.likes||0})">❤️ ${(c.likes||0)+(liked?1:0)}</button>
+            <button class="edit-btn-small" onclick="openModal(${c.id})">✏️</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openBlueMap(lat, lng, e) {
+  e.stopPropagation();
+  const coord = `${lat}, ${lng}`;
+  navigator.clipboard.writeText(coord).then(() => {
+    // 用 intent:// 直接開啟 Blue Map
+    window.location.href = `intent://map?lat=${lat}&lng=${lng}#Intent;scheme=bluemap;package=com.xmap.bluemap;end`;
+  }).catch(() => {
+    window.location.href = `intent://map?lat=${lat}&lng=${lng}#Intent;scheme=bluemap;package=com.xmap.bluemap;end`;
+  });
+}
+const TZDB_KEY = '4ADISXDEJ6FV';
+async function checkTime(e, id, lat, lng) {
+  e.stopPropagation();
+  const box = document.getElementById('time-' + id);
+  const btn = e.target;
+  btn.textContent = '⏳ 查詢中…';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`https://api.timezonedb.com/v2.1/get-time-zone?key=${TZDB_KEY}&format=json&by=position&lat=${lat}&lng=${lng}`);
+    const data = await res.json();
+    if (data.status !== 'OK') throw new Error(data.message);
+
+    const localTime = new Date(data.formatted);
+    const hour = localTime.getHours();
+    const min = String(localTime.getMinutes()).padStart(2,'0');
+    const timeStr = `${hour}:${min}`;
+    const zoneName = data.zoneName;
+
+    // 判斷是否安全（距離午夜超過1小時）
+    const minutesLeft = (24*60) - (hour*60 + localTime.getMinutes());
+    let warnHTML = '';
+    if (minutesLeft <= 60) {
+      warnHTML = `<span class="time-warn danger">⚠️ 距午夜只剩 ${minutesLeft} 分鐘！</span>`;
+    } else {
+      warnHTML = `<span class="time-warn safe">✅ 距午夜還有 ${Math.floor(minutesLeft/60)}h${minutesLeft%60}m</span>`;
+    }
+
+    box.style.display = 'flex';
+    box.style.flexDirection = 'column';
+    box.style.gap = '4px';
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span>🕐 當地時間</span>
+        <span class="time-val">${timeStr}</span>
+      </div>
+      <div style="font-size:11px;color:#888;">${zoneName}</div>
+      ${warnHTML}
+    `;
+    btn.textContent = '🔄 重新查詢';
+    btn.disabled = false;
+  } catch(err) {
+    box.style.display = 'flex';
+    box.innerHTML = '<span style="color:#e53935;font-size:12px;">❌ 查詢失敗，請再試一次</span>';
+    btn.textContent = '🕐 查當地時間';
+    btn.disabled = false;
+  }
+}
+
+function quickCopy(text, e) {
+  e.stopPropagation();
+  navigator.clipboard.writeText(text).then(() => showToast('✅ 座標已複製：' + text));
+}
+
+// ── render pins ──
+function renderPins() {
+  const mapBg = document.getElementById('map-bg');
+  mapBg.querySelectorAll('.map-pin').forEach(p => p.remove());
+  getFiltered().forEach(c => {
+    const x = c.pin_x || (Math.round(10 + (c.id % 80))) + '%';
+    const y = c.pin_y || (Math.round(10 + ((c.id * 7) % 80))) + '%';
+    const pin = document.createElement('div');
+    pin.className = 'map-pin';
+    pin.style.left = x; pin.style.top = y;
+    if (c.img) {
+      pin.innerHTML = `<div class="pin-bubble"><img src="${c.img}"></div><div class="pin-badge">${typeEmoji[c.type]||'🌱'}</div>`;
+    } else {
+      pin.innerHTML = `<div class="pin-bubble">${typeEmoji[c.type]||'🌱'}</div><div class="pin-badge">⭐</div>`;
+    }
+    pin.addEventListener('click', () => showPopup(c, pin));
+    mapBg.appendChild(pin);
+  });
+}
+
+// ── map popup ──
+function showPopup(c, pin) {
+  const popup = document.getElementById('map-popup');
+  const imgEl = document.getElementById('popup-img');
+  imgEl.innerHTML = c.img
+    ? `<img src="${c.img}" alt="${c.title}">`
+    : `<span style="font-size:44px">${typeEmoji[c.type]||'🌱'}</span>`;
+  document.getElementById('popup-title').textContent = c.title||'';
+  document.getElementById('popup-sub').textContent = c.sub||'';
+  document.getElementById('popup-stars').textContent = c.rating ? starsDisplay(c.rating)+' '+c.rating+'/5' : '';
+  document.getElementById('popup-loc').textContent = '📍 '+(c.loc||'')+(c.lat?` (${c.lat}, ${c.lng})`:'');
+  document.getElementById('popup-edit-btn').onclick = () => openModal(c.id);
+
+  const rect = pin.getBoundingClientRect();
+  const mapRect = document.getElementById('map-panel').getBoundingClientRect();
+  let left = rect.left - mapRect.left - 90;
+  let top  = rect.top  - mapRect.top  - 210;
+  if (left < 8) left = 8;
+  if (left + 218 > mapRect.width) left = mapRect.width - 222;
+  if (top < 8) top = rect.bottom - mapRect.top + 8;
+  popup.style.left = left + 'px';
+  popup.style.top  = top  + 'px';
+  popup.classList.add('visible');
+}
+document.getElementById('map-bg').addEventListener('click', e => {
+  if (!e.target.closest('.map-pin') && !e.target.closest('.map-popup'))
+    document.getElementById('map-popup').classList.remove('visible');
+});
+
+function focusPin(id) {
+  if (currentView !== 'map') return;
+  const c = CARDS.find(x => x.id === id); if (!c) return;
+  const x = c.pin_x || (Math.round(10 + (c.id % 80))) + '%';
+  const y = c.pin_y || (Math.round(10 + ((c.id * 7) % 80))) + '%';
+  const pins = document.querySelectorAll('.map-pin');
+  for (const pin of pins) {
+    if (pin.style.left === x && pin.style.top === y) { showPopup(c, pin); break; }
+  }
+}
+
+// ── like ──
+async function toggleLike(e, id, currentLikes) {
+  e.stopPropagation();
+  const wasLiked = likedSet.has(id);
+  if (wasLiked) likedSet.delete(id); else likedSet.add(id);
+  const newLikes = currentLikes + (wasLiked ? -1 : 1);
+  // update in DB
+  try {
+    await sbFetch(`postcards?id=eq.${id}`, {
+      method: 'PATCH',
+      prefer: 'return=minimal',
+      body: JSON.stringify({ likes: newLikes })
+    });
+    const idx = CARDS.findIndex(c => c.id === id);
+    if (idx >= 0) CARDS[idx].likes = newLikes;
+  } catch(err) { console.error(err); }
+  renderCards();
+}
+
+// ── view switch ──
+function setView(v) {
+  currentView = v;
+  document.getElementById('map-panel').classList.toggle('hidden', v !== 'map');
+  document.getElementById('cards-panel').classList.toggle('full-width', v !== 'map');
+  document.getElementById('btn-map').classList.toggle('active', v === 'map');
+  document.getElementById('btn-card').classList.toggle('active', v !== 'map');
+}
+
+// ── MODAL ──
+function openModal(id) {
+  editingId = id || null;
+  modalRating = 0;
+  modalImg = null;
+  document.getElementById('img-file-input').value = '';
+  showImgUI(false);
+
+  if (id) {
+    const c = CARDS.find(x => x.id === id);
+    document.getElementById('modal-title-text').textContent = '編輯明信片';
+    document.getElementById('f-title').value = c.title||'';
+    document.getElementById('f-sub').value = c.sub||'';
+    document.getElementById('f-loc').value = c.loc||'';
+    document.getElementById('f-coord').value = (c.lat && c.lng) ? `${c.lat}, ${c.lng}` : '';
+    modalRating = c.rating||0;
+    modalImg = c.img||null;
+    if (c.img) {
+      document.getElementById('img-preview').src = c.img;
+      showImgUI(true);
+    }
+    document.querySelectorAll('.type-opt').forEach(o => o.classList.toggle('selected', o.dataset.type === c.type));
+    document.getElementById('delete-btn').style.display = '';
+  } else {
+    document.getElementById('modal-title-text').textContent = '新增明信片';
+    document.getElementById('f-title').value = '';
+    document.getElementById('f-sub').value = '';
+    document.getElementById('f-loc').value = '';
+    document.getElementById('f-coord').value = '';
+    document.querySelectorAll('.type-opt').forEach((o,i) => o.classList.toggle('selected', i===0));
+    document.getElementById('delete-btn').style.display = 'none';
+  }
+  updateStarUI();
+  document.getElementById('modal-backdrop').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('modal-backdrop').classList.add('hidden'); }
+function backdropClose(e) { if (e.target === document.getElementById('modal-backdrop')) closeModal(); }
+
+function showImgUI(hasImg) {
+  document.getElementById('img-preview').style.display = hasImg ? 'block' : 'none';
+  document.getElementById('upload-overlay').style.display = hasImg ? 'none' : 'flex';
+  document.getElementById('change-overlay').style.display = hasImg ? 'flex' : 'none';
+}
+
+function handleImgUpload(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    modalImg = ev.target.result;
+    document.getElementById('img-preview').src = modalImg;
+    showImgUI(true);
+  };
+  reader.readAsDataURL(file);
+}
+
+function pickType(el) {
+  document.querySelectorAll('.type-opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+function pickStar(v) { modalRating = v; updateStarUI(); }
+function updateStarUI() {
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById('sw' + i);
+    el.classList.remove('half','full');
+    if (modalRating >= i) el.classList.add('full');
+    else if (modalRating >= i - 0.5) el.classList.add('half');
+  }
+  document.getElementById('rating-label').textContent = modalRating ? `（${modalRating} / 5）` : '（尚未評分）';
+}
+// attach half-star click handlers
+document.addEventListener('DOMContentLoaded', () => {
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById('sw' + i);
+    el.addEventListener('click', e => {
+      const rect = el.getBoundingClientRect();
+      const isLeft = (e.clientX - rect.left) < rect.width / 2;
+      pickStar(isLeft ? i - 0.5 : i);
+    });
+  }
+});
+function starsDisplay(n) {
+  if (!n) return '';
+  let out = '';
+  for (let i = 1; i <= 5; i++) {
+    if (n >= i) out += '⭐';
+    else if (n >= i - 0.5) out += '✨';
+  }
+  return out;
+}
+function copyCoord() {
+  const coord = document.getElementById('f-coord').value.trim();
+  if (!coord) { showToast('⚠️ 請先輸入座標'); return; }
+  navigator.clipboard.writeText(coord).then(() => {
+    const btn = document.getElementById('copy-coord-btn');
+    btn.textContent = '✅ 已複製'; btn.classList.add('coord-copied');
+    showToast('✅ 座標已複製：' + coord);
+    setTimeout(() => { btn.textContent = '📋 複製'; btn.classList.remove('coord-copied'); }, 2000);
+  });
+}
+
+async function saveCard() {
+  const title = document.getElementById('f-title').value.trim();
+  if (!title) { showToast('⚠️ 請輸入名稱'); return; }
+  const saveBtn = document.getElementById('save-btn');
+  saveBtn.disabled = true; saveBtn.textContent = '儲存中…';
+
+  const type = document.querySelector('.type-opt.selected').dataset.type;
+  const coordRaw = document.getElementById('f-coord').value.trim();
+  const coordParts = coordRaw.split(/[\s,，]+/).map(Number).filter(n => !isNaN(n));
+  const lat = coordParts[0] || null;
+  const lng = coordParts[1] || null;
+  const data = {
+    title,
+    sub: document.getElementById('f-sub').value.trim() || null,
+    loc: document.getElementById('f-loc').value.trim() || null,
+    lat, lng,
+    type, rating: modalRating || null, img: modalImg || null,
+  };
+
+  try {
+    // 檢查相同類型＋相同座標
+    if (!editingId && lat && lng) {
+      const dup = CARDS.find(c =>
+        c.type === type &&
+        c.lat && c.lng &&
+        Math.abs(c.lat - lat) < 0.0001 &&
+        Math.abs(c.lng - lng) < 0.0001
+      );
+      if (dup) {
+        const go = confirm(`⚠️ 已有相同類型「${typeLabel[type]}」在相近座標的明信片：\n「${dup.title}」\n\n還是要繼續新增嗎？`);
+        if (!go) { saveBtn.disabled = false; saveBtn.textContent = '儲存'; return; }
+      }
+    }
+    if (editingId) {
+      await sbFetch(`postcards?id=eq.${editingId}`, {
+        method: 'PATCH', prefer: 'return=minimal', body: JSON.stringify(data)
+      });
+      const idx = CARDS.findIndex(c => c.id === editingId);
+      if (idx >= 0) CARDS[idx] = { ...CARDS[idx], ...data };
+      showToast('✅ 已更新明信片');
+    } else {
+      const result = await sbFetch('postcards?select=*', {
+        method: 'POST', prefer: 'return=representation', body: JSON.stringify(data)
+      });
+      if (result && result[0]) CARDS.unshift(result[0]);
+      showToast('✅ 新增成功！');
+    }
+    closeModal();
+    renderCards();
+    renderPins();
+  } catch(err) {
+    showToast('❌ 儲存失敗：' + err.message);
+    console.error(err);
+  } finally {
+    saveBtn.disabled = false; saveBtn.textContent = '儲存';
+  }
+}
+
+async function deleteCard() {
+  if (!editingId) return;
+  try {
+    await sbFetch(`postcards?id=eq.${editingId}`, { method: 'DELETE' });
+    CARDS = CARDS.filter(c => c.id !== editingId);
+    closeModal(); renderCards(); renderPins();
+    showToast('🗑️ 已刪除');
+  } catch(err) {
+    showToast('❌ 刪除失敗');
+  }
+}
+
+// ── KEEP ALIVE ──
+function keepAlive() {
+  sbFetch('postcards?select=id&limit=1').catch(() => {});
+}
+setInterval(keepAlive, 4 * 60 * 1000); // 每4分鐘ping一次
+
+// ── PASSWORD ──
+const PW = '0416';
+function checkPw() {
+  const val = document.getElementById('pw-input').value;
+  if (val === PW) {
+    sessionStorage.setItem('pikmin_auth', '1');
+    document.getElementById('pw-screen').classList.add('hidden');
+    loadCards();
+  } else {
+    document.getElementById('pw-error').textContent = '密碼錯誤，請再試一次';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-input').focus();
+  }
+}
+
+// init
+if (sessionStorage.getItem('pikmin_auth') === '1') {
+  document.getElementById('pw-screen').classList.add('hidden');
+  loadCards();
+}
+</script>
+</body>
+</html>
