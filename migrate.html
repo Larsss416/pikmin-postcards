@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>圖片搬移工具</title>
+<style>
+  body { font-family: sans-serif; padding: 24px; background: #f5f5f5; max-width: 500px; margin: 0 auto; }
+  h2 { color: #5c3d1e; }
+  .btn { width: 100%; padding: 14px; background: #c8e63c; border: none; border-radius: 14px; font-size: 16px; font-weight: 800; cursor: pointer; margin-top: 16px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .progress { margin-top: 12px; background: #ddd; border-radius: 10px; height: 12px; overflow: hidden; }
+  .progress-bar { height: 100%; background: #c8e63c; transition: width .3s; border-radius: 10px; }
+  .log { margin-top: 16px; background: white; border-radius: 12px; padding: 14px; font-size: 13px; line-height: 1.8; max-height: 400px; overflow-y: auto; }
+  .ok { color: #4caf50; }
+  .err { color: #e53935; }
+  .info { color: #888; }
+  .done { background: #e8f7a0; border-radius: 10px; padding: 12px; text-align: center; font-weight: 800; margin-top: 12px; display: none; }
+</style>
+</head>
+<body>
+<h2>🌱 圖片搬移工具</h2>
+<p>把資料庫裡的圖片搬到 Storage，讓網頁載入更快。</p>
+<button class="btn" id="start-btn" onclick="startMigration()">開始搬移</button>
+<div class="progress" style="display:none" id="progress-wrap">
+  <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+</div>
+<div id="progress-text" style="font-size:13px;color:#888;margin-top:6px;text-align:center;"></div>
+<div class="log" id="log"></div>
+<div class="done" id="done">✅ 搬移完成！現在可以關閉這個頁面了。</div>
+
+<script>
+const SUPABASE_URL = 'https://bwcsqgfgccgrnemuekqg.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3Y3NxZ2ZnY2Nncm5lbXVla3FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MDg1ODIsImV4cCI6MjA5NTk4NDU4Mn0.A4PQU24957NTgd8GUdZfI5QOCtnuVAQviC3xqeb6pOs';
+
+function log(msg, cls='info') {
+  const el = document.getElementById('log');
+  el.innerHTML += `<div class="${cls}">${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function fetchOne(id) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/postcards?select=id,img&id=eq.${id}`, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return data[0] || null;
+}
+
+async function fetchAllIds() {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/postcards?select=id&order=id.asc`, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
+async function uploadToStorage(filename, base64) {
+  const parts = base64.split(',');
+  const mime = parts[0].match(/:(.*?);/)[1];
+  const binary = atob(parts[1]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: mime });
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/postcards/${filename}`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': mime,
+      'x-upsert': 'true'
+    },
+    body: blob
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return `${SUPABASE_URL}/storage/v1/object/public/postcards/${filename}`;
+}
+
+async function updateImg(id, url) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/postcards?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify({ img: url })
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+async function startMigration() {
+  const btn = document.getElementById('start-btn');
+  btn.disabled = true;
+  btn.textContent = '搬移中...';
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('done').style.display = 'none';
+  document.getElementById('progress-wrap').style.display = 'block';
+
+  try {
+    log('📋 讀取所有 ID...');
+    const ids = await fetchAllIds();
+    log(`找到 ${ids.length} 筆，逐一處理...`);
+
+    let ok = 0, skip = 0, fail = 0;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i].id;
+      const pct = Math.round((i+1)/ids.length*100);
+      document.getElementById('progress-bar').style.width = pct + '%';
+      document.getElementById('progress-text').textContent = `${i+1} / ${ids.length}`;
+
+      try {
+        const card = await fetchOne(id);
+        if (!card || !card.img || !card.img.startsWith('data:')) {
+          skip++;
+          continue;
+        }
+        const url = await uploadToStorage(`card-${id}.jpg`, card.img);
+        await updateImg(id, url);
+        log(`<span class="ok">✅ #${id} 完成</span>`);
+        ok++;
+      } catch(e) {
+        log(`<span class="err">❌ #${id} 失敗：${e.message}</span>`);
+        fail++;
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    log(`\n🎉 完成！成功 ${ok} 張，跳過 ${skip} 張，失敗 ${fail} 張`);
+    document.getElementById('done').style.display = 'block';
+  } catch(e) {
+    log(`<span class="err">❌ 錯誤：${e.message}</span>`);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '重新開始';
+}
+</script>
+</body>
+</html>
